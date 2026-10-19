@@ -3,6 +3,11 @@ import { createActivity, createTeam, getLeaderboard, listActivities, listTeams, 
 
 export const apiRouter = Router();
 
+apiRouter.get('/', (_request, response) => response.json({
+  name: 'OctoFit Tracker API',
+  endpoints: ['/api/activities', '/api/teams', '/api/leaderboard', '/api/workouts/suggestions/:userEmail'],
+}));
+
 apiRouter.get('/activities', async (_request, response, next) => {
   try { response.json({ activities: await listActivities() }); } catch (error) { next(error); }
 });

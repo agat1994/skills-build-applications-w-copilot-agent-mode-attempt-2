@@ -156,14 +156,16 @@ describe('OctoFit API contract', () => {
     const response = await request(app).get('/api/workouts/suggestions/hubot%40example.com');
     expect(response.body.suggestions[0]).toMatchObject({ title: 'Circuit' });
   });
-  it('serves a JSON index at the root and JSON 404s for unknown paths', async () => {
+  it('serves the JSON index under /api and JSON 404s everywhere else', async () => {
+    const index = await request(app).get('/api');
+    expect(index.status).toBe(200);
+    expect(index.headers['content-type']).toMatch(/application\/json/);
+    expect(index.body.endpoints).toEqual(expect.arrayContaining(['/api/activities', '/api/teams', '/api/leaderboard']));
     const root = await request(app).get('/');
-    expect(root.status).toBe(200);
+    expect(root.status).toBe(404);
     expect(root.headers['content-type']).toMatch(/application\/json/);
-    expect(root.body.endpoints).toEqual(expect.arrayContaining(['/api/activities', '/api/teams', '/api/leaderboard']));
     const missing = await request(app).get('/<script>alert(1)</script>');
     expect(missing.status).toBe(404);
-    expect(missing.headers['content-type']).toMatch(/application\/json/);
     expect(missing.text).not.toContain('<script>');
   });
   it('rejects fractional minutes below the schema minimum with a 400', async () => {
