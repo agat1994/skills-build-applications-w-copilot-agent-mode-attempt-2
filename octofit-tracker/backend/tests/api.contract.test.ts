@@ -183,4 +183,17 @@ describe('OctoFit API contract', () => {
       Team.find = original;
     }
   });
+  it('reports every invalid activity field in one 400 response', async () => {
+    const response = await request(app).post('/api/activities').send({});
+    expect(response.status).toBe(400);
+    for (const field of ['userId', 'teamId', 'type', 'minutes']) expect(response.body.error).toContain(field);
+  });
+  it('does not suggest workouts from partial goal matches', async () => {
+    const { user } = await createUserAndTeam('Hubot', 'hubot@example.com', 'Hubot', 'Robocats');
+    await User.updateOne({ _id: user._id }, { $set: { fitnessGoal: 'end' } });
+    await Workout.create({ title: 'Weekend Flow', focus: 'endurance', minutes: 30, difficulty: 'moderate' });
+    const response = await request(app).get('/api/workouts/suggestions/hubot%40example.com');
+    expect(response.status).toBe(200);
+    expect(response.body.suggestions).toEqual([]);
+  });
 });
