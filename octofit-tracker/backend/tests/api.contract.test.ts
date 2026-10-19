@@ -163,4 +163,14 @@ describe('OctoFit API contract', () => {
     const response = await request(app).get('/api/workouts/suggestions/hubot%40example.com');
     expect(response.body.suggestions[0]).toMatchObject({ title: 'Circuit' });
   });
+  it('serves a JSON index at the root and JSON 404s for unknown paths', async () => {
+    const root = await request(app).get('/');
+    expect(root.status).toBe(200);
+    expect(root.headers['content-type']).toMatch(/application\/json/);
+    expect(root.body.endpoints).toEqual(expect.arrayContaining(['/api/activities', '/api/teams', '/api/leaderboard']));
+    const missing = await request(app).get('/<script>alert(1)</script>');
+    expect(missing.status).toBe(404);
+    expect(missing.headers['content-type']).toMatch(/application\/json/);
+    expect(missing.text).not.toContain('<script>');
+  });
 });
