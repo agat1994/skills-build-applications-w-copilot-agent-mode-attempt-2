@@ -36,21 +36,16 @@ export async function listActivities() {
 
 export async function createActivity(input: unknown) {
   const body = asObject(input);
-  const problems: string[] = [];
-  const idProblem = (value: unknown, field: string) => {
-    if (typeof value !== 'string' || !mongoose.isValidObjectId(value)) problems.push(`${field} must be a valid id`);
-  };
-  idProblem(body.userId, 'userId');
-  idProblem(body.teamId, 'teamId');
-  if (typeof body.type !== 'string' || !body.type.trim()) problems.push('type is required');
+  const userId = requireId(body.userId, 'userId');
+  const teamId = requireId(body.teamId, 'teamId');
+  if (typeof body.type !== 'string' || !body.type.trim()) {
+    throw httpError(400, 'type is required');
+  }
   const minutes = body.minutes;
   if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes < 1) {
-    problems.push('minutes must be a number of at least 1');
+    throw httpError(400, 'minutes must be a number of at least 1');
   }
-  if (problems.length) throw httpError(400, problems.join('; '));
-  const userId = body.userId as string;
-  const teamId = body.teamId as string;
-  const type = (body.type as string).trim();
+  const type = body.type.trim();
   if (!(await User.exists({ _id: userId }))) throw httpError(404, 'User not found');
   if (!(await Team.exists({ _id: teamId }))) throw httpError(404, 'Team not found');
 
@@ -59,8 +54,8 @@ export async function createActivity(input: unknown) {
     user: userId,
     team: teamId,
     type,
-    minutes: minutes as number,
-    points: Math.round((minutes as number) * rate),
+    minutes,
+    points: Math.round(minutes * rate),
     occurredAt: new Date(),
   });
   return created.toObject();
