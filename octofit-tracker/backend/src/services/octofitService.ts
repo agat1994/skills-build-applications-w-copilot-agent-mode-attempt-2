@@ -36,26 +36,31 @@ export async function listActivities() {
 
 export async function createActivity(input: unknown) {
   const body = asObject(input);
-  const userId = requireId(body.userId, 'userId');
-  const teamId = requireId(body.teamId, 'teamId');
-  if (typeof body.type !== 'string' || !body.type.trim()) {
-    throw httpError(400, 'type is required');
-  }
+  const problems: string[] = [];
+  const idProblem = (value: unknown, field: string) => {
+    if (typeof value !== 'string' || !mongoose.isValidObjectId(value)) problems.push(`${field} must be a valid id`);
+  };
+  idProblem(body.userId, 'userId');
+  idProblem(body.teamId, 'teamId');
+  if (typeof body.type !== 'string' || !body.type.trim()) problems.push('type is required');
   const minutes = body.minutes;
   if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes < 1) {
-    throw httpError(400, 'minutes must be a number of at least 1');
+    problems.push('minutes must be a number of at least 1');
   }
+  if (problems.length) throw httpError(400, problems.join('; '));
+  const userId = body.userId as string;
+  const teamId = body.teamId as string;
+  const type = (body.type as string).trim();
   if (!(await User.exists({ _id: userId }))) throw httpError(404, 'User not found');
   if (!(await Team.exists({ _id: teamId }))) throw httpError(404, 'Team not found');
 
-  const type = body.type.trim();
   const rate = POINTS_PER_MINUTE[type.toLowerCase()] ?? 5;
   const created = await Activity.create({
     user: userId,
     team: teamId,
     type,
-    minutes,
-    points: Math.round(minutes * rate),
+    minutes: minutes as number,
+    points: Math.round((minutes as number) * rate),
     occurredAt: new Date(),
   });
   return created.toObject();
@@ -123,13 +128,8 @@ export async function suggestWorkouts(userEmail: string) {
   if (!user) throw httpError(404, 'User not found');
 
   const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const findWorkout = async (value: string) => {
-    const escaped = escapeRegex(value);
-    const exact = await Workout.findOne({ focus: new RegExp(`^${escaped}$`, 'i') }).sort({ _id: 1 }).lean();
-    if (exact) return exact;
-    const pattern = new RegExp(escaped, 'i');
-    return Workout.findOne({ $or: [{ focus: pattern }, { title: pattern }] }).sort({ _id: 1 }).lean();
-  };
+  const findWorkout = (value: string) =>
+    Workout.findOne({ focus: new RegExp(`^${escapeRegex(value)}$`, 'i') }).sort({ _id: 1 }).lean();
 
   const goal = user.fitnessGoal.trim();
   if (goal) {
@@ -152,4 +152,3 @@ export async function suggestWorkouts(userEmail: string) {
   return [];
 }
 
-export { User };
