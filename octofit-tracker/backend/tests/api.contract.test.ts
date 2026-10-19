@@ -191,4 +191,51 @@ describe('OctoFit API contract', () => {
     expect(response.status).toBe(200);
     expect(response.body.suggestions).toEqual([]);
   });
+  it('trims activity types and rejects non-string or blank types', async () => {
+    const { user, team } = await createUserAndTeam('Mona', 'mona@example.com', 'Mona');
+    const ids = { userId: user._id.toString(), teamId: team._id.toString() };
+    for (const type of ['   ', 42, null]) {
+      const response = await request(app).post('/api/activities').send({ ...ids, type, minutes: 30 });
+      expect(response.status).toBe(400);
+    }
+    const created = await request(app).post('/api/activities').send({ ...ids, type: '  Run  ', minutes: 10 });
+    expect(created.status).toBe(201);
+    expect(created.body.activity).toMatchObject({ type: 'Run', points: 100 });
+  });
+  it('rejects invalid team payloads and trims team names', async () => {
+    expect((await request(app).post('/api/teams').send({ name: 'Octocats', mascot: 'Mona', members: 'nope' })).status).toBe(400);
+    expect((await request(app).post('/api/teams').send({ name: 'Octocats', mascot: 'Mona', members: ['bad-id'] })).status).toBe(400);
+    const unknown = await request(app).post('/api/teams').send({ name: 'Octocats', mascot: 'Mona', members: [new mongoose.Types.ObjectId().toString()] });
+    expect(unknown.status).toBe(404);
+    expect(await Team.countDocuments()).toBe(0);
+    const created = await request(app).post('/api/teams').send({ name: '  Octocats ', mascot: ' Mona ' });
+    expect(created.body.team).toMatchObject({ name: 'Octocats', mascot: 'Mona', members: [] });
+  });
+  it('ranks teams from only their own activities', async () => {
+    const a = await createUserAndTeam('A', 'a@example.com', 'A', 'Alpha');
+    const b = await createUserAndTeam('B', 'b@example.com', 'B', 'Beta');
+    await Activity.create([
+      { user: a.user._id, team: a.team._id, type: 'run', minutes: 10, points: 5, occurredAt: new Date() },
+      { user: b.user._id, team: b.team._id, type: 'run', minutes: 10, points: 50, occurredAt: new Date() },
+      { user: b.user._id, team: b.team._id, type: 'run', minutes: 10, points: 50, occurredAt: new Date() },
+    ]);
+    const response = await request(app).get('/api/leaderboard');
+    expect(response.body.leaderboard).toEqual([
+      { teamName: 'Beta', totalPoints: 100, rank: 1 },
+      { teamName: 'Alpha', totalPoints: 5, rank: 2 },
+    ]);
+  });
+  it('falls back to recent activity, ignores email case, and returns no suggestions when nothing matches', async () => {
+    const { user, team } = await createUserAndTeam('Mona', 'mona@example.com', 'Mona');
+    await User.updateOne({ _id: user._id }, { $set: { fitnessGoal: 'flexibility' } });
+    await Workout.create({ title: 'Intervals', focus: 'endurance', minutes: 30, difficulty: 'moderate' });
+    const none = await request(app).get('/api/workouts/suggestions/MONA%40example.com');
+    expect(none.status).toBe(200);
+    expect(none.body.suggestions).toEqual([]);
+    await Activity.create({ user: user._id, team: team._id, type: 'cycling', minutes: 20, points: 160, occurredAt: new Date() });
+    const fallback = await request(app).get('/api/workouts/suggestions/MONA%40example.com');
+    expect(fallback.body.suggestions[0]).toMatchObject({ title: 'Intervals', reason: expect.stringMatching(/cycling/i) });
+    const blank = await request(app).get('/api/workouts/suggestions/%20');
+    expect(blank.status).toBe(400);
+  });
 });
