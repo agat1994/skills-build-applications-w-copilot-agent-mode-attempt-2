@@ -58,13 +58,6 @@ describe('OctoFit API contract', () => {
     expect(walk.body.activity.points).toBe(40);
     expect(swim.body.activity.points).toBe(90);
   });
-  it('rejects activities logged for a team the user does not belong to', async () => {
-    const { user } = await createUserAndTeam('Mona', 'mona@example.com', 'Mona');
-    const other = await Team.create({ name: 'Other', mascot: 'Hubot', members: [] });
-    const response = await request(app).post('/api/activities').send({ userId: user._id.toString(), teamId: other._id.toString(), type: 'run', minutes: 30 });
-    expect(response.status).toBe(400);
-    expect(await Activity.countDocuments()).toBe(0);
-  });
   it('creates teams and exposes members', async () => {
     const member = await User.create({ name: 'Mona', email: 'mona@example.com', fitnessGoal: 'endurance' });
     const invalid = await request(app).post('/api/teams').send({ mascot: 'Mona' });

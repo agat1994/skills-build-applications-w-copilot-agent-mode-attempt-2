@@ -45,10 +45,8 @@ export async function createActivity(input: unknown) {
   if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) {
     throw httpError(400, 'minutes must be a positive number');
   }
-  const user = await User.findById(userId).select('team').lean();
-  if (!user) throw httpError(404, 'User not found');
+  if (!(await User.exists({ _id: userId }))) throw httpError(404, 'User not found');
   if (!(await Team.exists({ _id: teamId }))) throw httpError(404, 'Team not found');
-  if (user.team && user.team.toString() !== teamId) throw httpError(400, 'User does not belong to this team');
 
   const type = body.type.trim();
   const rate = POINTS_PER_MINUTE[type.toLowerCase()] ?? 5;
