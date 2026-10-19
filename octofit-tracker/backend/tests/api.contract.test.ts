@@ -166,4 +166,21 @@ describe('OctoFit API contract', () => {
     expect(missing.headers['content-type']).toMatch(/application\/json/);
     expect(missing.text).not.toContain('<script>');
   });
+  it('rejects fractional minutes below the schema minimum with a 400', async () => {
+    const { user, team } = await createUserAndTeam('Mona', 'mona@example.com', 'Mona');
+    const response = await request(app).post('/api/activities').send({ userId: user._id.toString(), teamId: team._id.toString(), type: 'run', minutes: 0.5 });
+    expect(response.status).toBe(400);
+    expect(await Activity.countDocuments()).toBe(0);
+  });
+  it('does not leak internal error details in 500 responses', async () => {
+    const original = Team.find;
+    Team.find = (() => { throw new Error('mongo internal secret'); }) as unknown as typeof Team.find;
+    try {
+      const response = await request(app).get('/api/teams');
+      expect(response.status).toBe(500);
+      expect(response.text).not.toContain('mongo internal secret');
+    } finally {
+      Team.find = original;
+    }
+  });
 });

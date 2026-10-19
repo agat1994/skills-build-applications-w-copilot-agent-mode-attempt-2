@@ -14,7 +14,9 @@ export function createApp() {
   app.use('/api', apiRouter);
   app.use((_request, response) => response.status(404).json({ error: 'Not found' }));
   app.use((error: Error & { status?: number }, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
-    response.status(error.status ?? 500).json({ error: error.message });
+    const status = error.status ?? 500;
+    if (status >= 500) console.error(error);
+    response.status(status).json({ error: status >= 500 ? 'Internal server error' : error.message });
   });
   return app;
 }

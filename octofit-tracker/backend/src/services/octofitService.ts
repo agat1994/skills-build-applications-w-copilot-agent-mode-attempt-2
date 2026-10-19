@@ -42,8 +42,8 @@ export async function createActivity(input: unknown) {
     throw httpError(400, 'type is required');
   }
   const minutes = body.minutes;
-  if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) {
-    throw httpError(400, 'minutes must be a positive number');
+  if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes < 1) {
+    throw httpError(400, 'minutes must be a number of at least 1');
   }
   if (!(await User.exists({ _id: userId }))) throw httpError(404, 'User not found');
   if (!(await Team.exists({ _id: teamId }))) throw httpError(404, 'Team not found');
