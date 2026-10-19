@@ -22,8 +22,10 @@ const POINTS_PER_MINUTE: Record<string, number> = {
   running: 10,
   cycle: 8,
   cycling: 8,
+  swim: 9,
   swimming: 9,
   strength: 7,
+  walk: 4,
   walking: 4,
   yoga: 3,
 };
@@ -43,8 +45,10 @@ export async function createActivity(input: unknown) {
   if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) {
     throw httpError(400, 'minutes must be a positive number');
   }
-  if (!(await User.exists({ _id: userId }))) throw httpError(404, 'User not found');
+  const user = await User.findById(userId).select('team').lean();
+  if (!user) throw httpError(404, 'User not found');
   if (!(await Team.exists({ _id: teamId }))) throw httpError(404, 'Team not found');
+  if (user.team && user.team.toString() !== teamId) throw httpError(400, 'User does not belong to this team');
 
   const type = body.type.trim();
   const rate = POINTS_PER_MINUTE[type.toLowerCase()] ?? 5;
@@ -74,8 +78,8 @@ export async function createTeam(input: unknown) {
   let members: string[] = [];
   if (body.members !== undefined) {
     if (!Array.isArray(body.members)) throw httpError(400, 'members must be an array');
-    members = body.members.map((member) => requireId(member, 'members[]'));
-    const unique = [...new Set(members)];
+    const unique = [...new Set(body.members.map((member) => requireId(member, 'members[]')))];
+    members = unique;
     const count = await User.countDocuments({ _id: { $in: unique } });
     if (count !== unique.length) throw httpError(404, 'One or more members not found');
   }
@@ -84,6 +88,10 @@ export async function createTeam(input: unknown) {
     mascot: body.mascot.trim(),
     members,
   });
+  if (members.length) {
+    await Team.updateMany({ _id: { $ne: created._id } }, { $pull: { members: { $in: members } } });
+    await User.updateMany({ _id: { $in: members } }, { $set: { team: created._id } });
+  }
   return created.toObject();
 }
 
@@ -117,9 +125,12 @@ export async function suggestWorkouts(userEmail: string) {
   if (!user) throw httpError(404, 'User not found');
 
   const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const findWorkout = (value: string) => {
-    const pattern = new RegExp(escapeRegex(value), 'i');
-    return Workout.findOne({ $or: [{ focus: pattern }, { title: pattern }] }).lean();
+  const findWorkout = async (value: string) => {
+    const escaped = escapeRegex(value);
+    const exact = await Workout.findOne({ focus: new RegExp(`^${escaped}$`, 'i') }).sort({ _id: 1 }).lean();
+    if (exact) return exact;
+    const pattern = new RegExp(escaped, 'i');
+    return Workout.findOne({ $or: [{ focus: pattern }, { title: pattern }] }).sort({ _id: 1 }).lean();
   };
 
   const goal = user.fitnessGoal.trim();
